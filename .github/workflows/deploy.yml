@@ -7,6 +7,8 @@ on:
 env:
   GCP_REGION: us-central1
   GCP_PROJECT_ID: chat-gpt-videos
+  GCP_IMAGE_REPO: ai-agent-1
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -22,15 +24,19 @@ jobs:
       - name: Configure Docker
         run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
 
+      - name: List ai-agent Artifacts
+        run: |
+          gcloud artifacts docker images list ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_IMAGE_REPO }}
+
       - name: Build Docker image
         run: |
-          docker build -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/ai-agent/ai-agent:latest .
-          docker push ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/ai-agent/ai-agent:latest
+          docker build -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_IMAGE_REPO }}/ai-agent:latest .
+          docker push ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_IMAGE_REPO }}/ai-agent:latest
 
       - name: Deploy to Cloud Run
         run: |
           gcloud run deploy ai-agent \
-            --image ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/ai-agent/ai-agent:latest \
+            --image ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_IMAGE_REPO }}/ai-agent:latest \
             --region ${{ env.GCP_REGION }} \
             --platform managed \
             --allow-unauthenticated \
