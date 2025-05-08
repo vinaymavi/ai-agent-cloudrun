@@ -26,6 +26,10 @@ jobs:
           gcloud auth list
           gcloud config list
 
+      - name: List ai-agent Artifacts
+        run: |
+          gcloud artifacts docker images list ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/ai-agent
+
       - name: Configure Docker
         run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
 
