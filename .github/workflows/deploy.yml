@@ -7,7 +7,7 @@ on:
 env:
   GCP_REGION: us-central1
   GCP_PROJECT_ID: chat-gpt-videos
-  GCP_IMAGE_REPO: ai-agent-1
+  GCP_IMAGE_REPO: ai-agents
 
 jobs:
   deploy:
