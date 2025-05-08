@@ -3,4 +3,3 @@ uvicorn
 pydantic
 openai
 python-dotenv
-gunicorn

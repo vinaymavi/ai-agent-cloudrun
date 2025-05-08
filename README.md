@@ -27,8 +27,12 @@ Create `main.py`:
 ```python
 from fastapi import FastAPI
 from pydantic import BaseModel
+from openai import OpenAI
 import os
-import openai
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = FastAPI()
 
@@ -37,13 +41,18 @@ class Prompt(BaseModel):
 
 @app.post("/generate")
 async def generate_response(prompt: Prompt):
-    openai.api_key = os.getenv("OPENAI_API_KEY")
-    client = openai.OpenAI()
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "user", "content": prompt.message}]
     )
     return {"reply": response.choices[0].message.content}
+
+# Create a new helath check endpoint
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
 ```
 
 Create `requirements.txt`:
@@ -51,8 +60,9 @@ Create `requirements.txt`:
 ```txt
 fastapi
 uvicorn
-openai>=1.0.0
 pydantic
+openai
+python-dotenv
 ```
 
 ---
@@ -63,10 +73,16 @@ Create a `Dockerfile`:
 
 ```dockerfile
 FROM python:3.10-slim
+
 WORKDIR /app
 COPY . /app
 RUN pip install -r requirements.txt
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+
+EXPOSE ${PORT:-8000}
+
+# Define the command to run the application
+# Use 0.0.0.0 to make it accessible from outside the container
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
 ```
 
 Build and test locally:
@@ -83,7 +99,7 @@ docker run -p 8080:8080 ai-agent
 ```bash
 PROJECT_ID="your-project-id"
 SA_NAME="cloud-run-deployer"
-RUNTIME_SA="YOUR_PROJECT_NUMBER-compute@developer.gserviceaccount.com"
+PROJECT_NUMBER="your-project-number"
 ```
 
 Create a deployer service account:
@@ -108,7 +124,7 @@ gcloud projects add-iam-policy-binding $PROJECT_ID \
   --role="roles/artifactregistry.writer"
 
 # ActAs permission on runtime service account
-gcloud iam service-accounts add-iam-policy-binding $RUNTIME_SA \
+gcloud iam service-accounts add-iam-policy-binding $PROJECT_NUMBER-compute@developer.gserviceaccount.com \
   --member="serviceAccount:$SA_NAME@$PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/iam.serviceAccountUser"
 ```
@@ -160,53 +176,40 @@ on:
   push:
     branches: [main]
 
+env:
+  GCP_REGION: us-central1
+  GCP_PROJECT_ID: <your-project-id>
+  GCP_IMAGE_REPO: ai-agents
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    env:
-      REGION: us-central1
-      REPO_NAME: ai-agent
-      IMAGE_NAME: ai-agent
-      IMAGE_URI: us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/ai-agent/ai-agent
-
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v3
 
       - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
+        uses: google-github-actions/auth@v2
         with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Enable Artifact Registry API
-        run: gcloud services enable artifactregistry.googleapis.com
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
 
-      - name: Ensure Artifact Registry Repo Exists
+      - name: Build Docker image
         run: |
-          gcloud artifacts repositories describe $REPO_NAME \
-            --location=$REGION || \
-          gcloud artifacts repositories create $REPO_NAME \
-            --repository-format=docker \
-            --location=$REGION \
-            --description="Docker repo for AI agent"
-
-      - name: Authenticate Docker
-        run: gcloud auth configure-docker $REGION-docker.pkg.dev
-
-      - name: Build and Push Image
-        run: |
-          docker build -t $IMAGE_URI .
-          docker push $IMAGE_URI
+          docker build -t ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_IMAGE_REPO }}/ai-agent:latest .
+          docker push ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_IMAGE_REPO }}/ai-agent:latest
 
       - name: Deploy to Cloud Run
         run: |
-          gcloud run deploy $IMAGE_NAME \
-            --image $IMAGE_URI \
-            --region $REGION \
+          gcloud run deploy ai-agent \
+            --image ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.GCP_IMAGE_REPO }}/ai-agent:latest \
+            --region ${{ env.GCP_REGION }} \
             --platform managed \
             --allow-unauthenticated \
             --set-env-vars OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+
 ```
 
 ---
