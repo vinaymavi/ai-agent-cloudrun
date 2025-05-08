@@ -4,6 +4,10 @@ Deploying AI applications quickly and securely is essential for scaling modern s
 
 ---
 
+![Deployment Architecture](images/deployment-architecture.png)
+
+---
+
 ## ✅ Prerequisites
 
 Make sure you have:
